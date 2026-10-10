@@ -116,6 +116,15 @@ async function askGemini(model, message, history, image) {
 
     let answer = data.output_text || "";
 
+    if (!answer && Array.isArray(data.steps)) {
+      answer = data.steps
+        .filter(step => step.type === "model_output")
+        .flatMap(step => Array.isArray(step.content) ? step.content : [])
+        .filter(item => item.type === "text")
+        .map(item => item.text || "")
+        .join("\n");
+    }
+
     if (!answer && Array.isArray(data.outputs)) {
       answer = data.outputs
         .map(item => item.text || "")
@@ -123,7 +132,9 @@ async function askGemini(model, message, history, image) {
     }
 
     if (!answer.trim()) {
-      throw new Error("Gemini returned an empty response.");
+      console.error("Gemini response had no text. Status:", data.status);
+      console.error("Gemini response fields:", Object.keys(data));
+      throw new Error("Gemini returned no text. Check Render logs for response status.");
     }
 
     return answer.trim();
