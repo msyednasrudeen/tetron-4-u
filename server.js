@@ -10,521 +10,530 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// API keys: Render Environment Variables
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith("image/")) {
+      return cb(null, true);
+    }
+    cb(new Error("Images only are supported."));
+  }
+});
+
 const GEMINI_KEY = process.env.T4U_GOOGLE_AI_SECRET;
 const OPENAI_KEY = process.env.T4U_OPENAI_SECRET;
 
-// Image uploads are stored in memory, not on disk.
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 5 * 1024 * 1024,
-        files: 1
-    },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype && file.mimetype.startsWith("image/")) {
-            cb(null, true);
-        } else {
-            cb(new Error("Please upload a valid image."));
-        }
+const CACHE_TTL = 10 * 60 * 1000;
+const REQUEST_TIMEOUT = 15000;
+const MAX_ATTEMPTS = 3;
+const MAX_OUTPUT_TOKENS = 1024;
+
+const modelCache = {
+  gemini: { models: [], expires: 0 },
+  openai: { models: [], expires: 0 }
+};
+
+const SYSTEM_PROMPT = `
+You are TETRON 4 U, a helpful AI assistant.
+Give clear, accurate, friendly answers.
+Keep simple questions concise.
+For programming questions, provide working code and explain important steps.
+If you are unsure, be honest.
+Do not invent facts.
+`;
+
+function timeoutSignal() {
+  return AbortSignal.timeout(REQUEST_TIMEOUT);
+}
+
+async function fetchJSON(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    signal: timeoutSignal()
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error = new Error(
+      data?.error?.message ||
+      data?.error?.status ||
+      `API request failed (${response.status})`
+    );
+
+    error.status = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+/* ---------------- GEMINI MODEL DISCOVERY ---------------- */
+
+async function getGeminiModels(forceRefresh = false) {
+  if (!GEMINI_KEY) return [];
+
+  if (
+    !forceRefresh &&
+    modelCache.gemini.expires > Date.now() &&
+    modelCache.gemini.models.length
+  ) {
+    return modelCache.gemini.models;
+  }
+
+  try {
+    const data = await fetchJSON(
+      `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${encodeURIComponent(GEMINI_KEY)}`
+    );
+
+    const models = (data.models || [])
+      .filter(model => {
+        const name = (model.name || "").toLowerCase();
+        const methods = model.supportedGenerationMethods || [];
+
+        return (
+          methods.includes("generateContent") &&
+          /gemini/.test(name) &&
+          /(flash|pro)/.test(name) &&
+          !/(preview|experimental|exp-|embedding|tts|image-generation)/.test(name)
+        );
+      })
+      .sort((a, b) => {
+        const score = model => {
+          const name = model.name.toLowerCase();
+
+          if (/gemini-2\.5-flash/.test(name)) return 1;
+          if (/gemini-2\.0-flash/.test(name)) return 2;
+          if (/flash/.test(name)) return 3;
+          if (/pro/.test(name)) return 4;
+
+          return 10;
+        };
+
+        return score(a) - score(b);
+      })
+      .map(model => ({
+        id: model.name.replace(/^models\//, ""),
+        provider: "gemini"
+      }));
+
+    modelCache.gemini = {
+      models,
+      expires: Date.now() + CACHE_TTL
+    };
+
+    return models;
+  } catch (error) {
+    console.error("Gemini model discovery failed:", error.message);
+
+    if (modelCache.gemini.models.length) {
+      return modelCache.gemini.models;
     }
-});
 
-// --------------------------------------------------
-// HEALTH CHECK
-// --------------------------------------------------
+    return [];
+  }
+}
 
-app.get("/api/health", (req, res) => {
-    res.json({
-        success: true,
-        app: "TETRON 4 U",
-        geminiConfigured: Boolean(GEMINI_KEY),
-        openaiConfigured: Boolean(OPENAI_KEY)
+/* ---------------- OPENAI MODEL DISCOVERY ---------------- */
+
+const OPENAI_PRIORITY = [
+  "gpt-4o-mini",
+  "gpt-4.1-mini",
+  "gpt-4.1-nano",
+  "gpt-4o",
+  "gpt-4.1"
+];
+
+function openAIModelScore(id) {
+  const name = id.toLowerCase();
+  const exactIndex = OPENAI_PRIORITY.indexOf(name);
+
+  if (exactIndex !== -1) return exactIndex;
+
+  if (!/^gpt-4/.test(name)) return 100;
+
+  if (/(preview|realtime|audio|transcribe|tts|embedding|search|image|instruct)/.test(name)) {
+    return 200;
+  }
+
+  return 50;
+}
+
+async function getOpenAIModels(forceRefresh = false) {
+  if (!OPENAI_KEY) return [];
+
+  if (
+    !forceRefresh &&
+    modelCache.openai.expires > Date.now() &&
+    modelCache.openai.models.length
+  ) {
+    return modelCache.openai.models;
+  }
+
+  try {
+    const data = await fetchJSON("https://api.openai.com/v1/models", {
+      headers: {
+        Authorization: `Bearer ${OPENAI_KEY}`
+      }
     });
-});
 
-// --------------------------------------------------
-// GEMINI MODEL LIST
-// --------------------------------------------------
+    const models = (data.data || [])
+      .map(model => model.id)
+      .filter(id => {
+        const name = id.toLowerCase();
 
-async function getGeminiModels() {
-    if (!GEMINI_KEY) {
-        throw new Error("Gemini API key is missing in Render.");
-    }
-
-    const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-        {
-            headers: {
-                "x-goog-api-key": GEMINI_KEY
-            }
-        }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(
-            data.error?.message || "Unable to fetch Gemini models."
+        return (
+          /^gpt-4/.test(name) &&
+          !/(preview|realtime|audio|transcribe|tts|embedding|search|image|instruct)/.test(name)
         );
+      })
+      .sort((a, b) => openAIModelScore(a) - openAIModelScore(b))
+      .map(id => ({
+        id,
+        provider: "openai"
+      }));
+
+    modelCache.openai = {
+      models,
+      expires: Date.now() + CACHE_TTL
+    };
+
+    return models;
+  } catch (error) {
+    console.error("OpenAI model discovery failed:", error.message);
+
+    if (modelCache.openai.models.length) {
+      return modelCache.openai.models;
     }
 
-    return (data.models || [])
-        .filter(model => {
-            const methods = model.supportedGenerationMethods || [];
-
-            return (
-                methods.includes("generateContent") &&
-                model.name?.startsWith("models/")
-            );
-        })
-        .map(model => ({
-            id: model.name.replace(/^models\//, ""),
-            name: model.displayName || model.name,
-            provider: "gemini",
-            description: model.description || ""
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    return [];
+  }
 }
 
-// --------------------------------------------------
-// OPENAI MODEL LIST
-// --------------------------------------------------
+/* ---------------- MODEL SUPPORT ---------------- */
 
-async function getOpenAIModels() {
-    if (!OPENAI_KEY) {
-        throw new Error("OpenAI API key is missing in Render.");
-    }
-
-    const response = await fetch(
-        "https://api.openai.com/v1/models",
-        {
-            headers: {
-                Authorization: `Bearer ${OPENAI_KEY}`
-            }
-        }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(
-            data.error?.message || "Unable to fetch OpenAI models."
-        );
-    }
-
-    const pattern =
-        /^(gpt-|chatgpt-|o[1-9](-|$)|o[1-9][a-z0-9-]*$)/i;
-
-    return (data.data || [])
-        .filter(model => pattern.test(model.id))
-        .map(model => ({
-            id: model.id,
-            name: model.id,
-            provider: "openai",
-            description: "OpenAI model"
-        }))
-        .sort((a, b) => a.id.localeCompare(b.id));
+function supportsOpenAIImages(modelId) {
+  return /^(gpt-4o-mini|gpt-4o|gpt-4\.1-mini|gpt-4\.1-nano|gpt-4\.1)$/i
+    .test(modelId);
 }
 
-// --------------------------------------------------
-// MODELS ENDPOINT
-// --------------------------------------------------
+function supportsGeminiImages(modelId) {
+  return /(flash|pro)/i.test(modelId);
+}
 
-app.get("/api/models", async (req, res) => {
-    const provider = String(req.query.provider || "").toLowerCase();
+async function getCandidates(provider, hasImage) {
+  let models = [];
 
-    try {
-        let models;
+  if (provider === "gemini") {
+    models = await getGeminiModels();
+  } else {
+    models = await getOpenAIModels();
+  }
 
-        if (provider === "gemini") {
-            models = await getGeminiModels();
-        } else if (
-            provider === "openai" ||
-            provider === "chatgpt"
-        ) {
-            models = await getOpenAIModels();
-        } else {
-            return res.status(400).json({
-                success: false,
-                error: "Choose Gemini or OpenAI."
-            });
-        }
+  if (hasImage) {
+    models = models.filter(model =>
+      model.provider === "gemini"
+        ? supportsGeminiImages(model.id)
+        : supportsOpenAIImages(model.id)
+    );
+  }
 
-        res.json({
-            success: true,
-            provider,
-            count: models.length,
-            models
-        });
+  return models;
+}
 
-    } catch (error) {
-        console.error("Model list error:", error.message);
-
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// --------------------------------------------------
-// GEMINI CHAT + OPTIONAL IMAGE
-// --------------------------------------------------
+/* ---------------- GEMINI CHAT ---------------- */
 
 async function askGemini(model, message, history, image) {
-    const contents = [];
+  const contents = [];
 
-    // Convert previous conversation into Gemini's role format.
-    for (const item of history) {
-        if (!item || !["user", "assistant"].includes(item.role)) {
-            continue;
-        }
+  for (const item of history) {
+    if (!item || !["user", "assistant"].includes(item.role)) continue;
 
-        if (typeof item.text !== "string" || !item.text.trim()) {
-            continue;
-        }
-
-        contents.push({
-            role: item.role === "assistant" ? "model" : "user",
-            parts: [{ text: item.text.slice(0, 10000) }]
-        });
+    if (typeof item.content === "string" && item.content.trim()) {
+      contents.push({
+        role: item.role === "assistant" ? "model" : "user",
+        parts: [{ text: item.content.slice(0, 4000) }]
+      });
     }
+  }
 
-    const parts = [{ text: message }];
+  const parts = [{ text: message }];
 
-    if (image) {
-        parts.push({
-            inlineData: {
-                mimeType: image.mimetype,
-                data: image.buffer.toString("base64")
-            }
-        });
-    }
-
-    contents.push({
-        role: "user",
-        parts
+  if (image) {
+    parts.push({
+      inline_data: {
+        mime_type: image.mimetype,
+        data: image.buffer.toString("base64")
+      }
     });
+  }
 
-    const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": GEMINI_KEY
-            },
-            body: JSON.stringify({
-                systemInstruction: {
-                    parts: [{
-                        text:
-                            "You are TETRON 4 U, a helpful AI assistant. " +
-                            "Give accurate, clear and useful answers. " +
-                            "Adapt to the user's language. " +
-                            "If the user writes Tamil-English, respond naturally in Tamil-English. " +
-                            "If an image is supplied, analyze its visible contents carefully."
-                    }]
-                },
-                contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 2048
-                }
-            })
+  contents.push({
+    role: "user",
+    parts
+  });
+
+  const data = await fetchJSON(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(GEMINI_KEY)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents,
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: MAX_OUTPUT_TOKENS
         }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(
-            data.error?.message || `Gemini request failed (${response.status}).`
-        );
+      })
     }
+  );
 
-    const answer = data.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
+  const answer = (data.candidates?.[0]?.content?.parts || [])
+    .map(part => part.text || "")
+    .join("")
+    .trim();
 
-    if (!answer) {
-        throw new Error("Gemini did not return a text answer.");
-    }
+  if (!answer) throw new Error("Gemini returned an empty response.");
 
-    return answer;
+  return answer;
 }
 
-// --------------------------------------------------
-// OPENAI CHAT + OPTIONAL IMAGE
-// --------------------------------------------------
+/* ---------------- OPENAI CHAT ---------------- */
 
 async function askOpenAI(model, message, history, image) {
-    const messages = [
-        {
-            role: "system",
-            content:
-                "You are TETRON 4 U, a helpful AI assistant. " +
-                "Give accurate, clear and useful answers. " +
-                "Adapt to the user's language. " +
-                "If the user writes Tamil-English, respond naturally in Tamil-English. " +
-                "If an image is supplied, analyze it carefully."
-        }
-    ];
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT }
+  ];
 
-    for (const item of history) {
-        if (!item || !["user", "assistant"].includes(item.role)) {
-            continue;
-        }
+  for (const item of history) {
+    if (!item || !["user", "assistant"].includes(item.role)) continue;
 
-        if (typeof item.text !== "string" || !item.text.trim()) {
-            continue;
-        }
-
-        messages.push({
-            role: item.role,
-            content: item.text.slice(0, 10000)
-        });
+    if (typeof item.content === "string" && item.content.trim()) {
+      messages.push({
+        role: item.role,
+        content: item.content.slice(0, 4000)
+      });
     }
+  }
 
-    let userContent;
-
-    if (image) {
-        userContent = [
-            {
-                type: "text",
-                text: message || "Please analyze this image."
-            },
-            {
-                type: "image_url",
-                image_url: {
-                    url:
-                        `data:${image.mimetype};base64,` +
-                        image.buffer.toString("base64")
-                }
-            }
-        ];
-    } else {
-        userContent = message;
-    }
-
+  if (image) {
     messages.push({
-        role: "user",
-        content: userContent
-    });
-
-    const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
+      role: "user",
+      content: [
+        { type: "text", text: message || "Describe this image." },
         {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${OPENAI_KEY}`
-            },
-            body: JSON.stringify({
-                model,
-                messages,
-                max_completion_tokens: 2048
-            })
+          type: "image_url",
+          image_url: {
+            url: `data:${image.mimetype};base64,${image.buffer.toString("base64")}`,
+            detail: "low"
+          }
         }
-    );
+      ]
+    });
+  } else {
+    messages.push({
+      role: "user",
+      content: message
+    });
+  }
 
-    const data = await response.json();
+  const data = await fetchJSON("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_completion_tokens: MAX_OUTPUT_TOKENS
+    })
+  });
 
-    if (!response.ok) {
-        throw new Error(
-            data.error?.message || `OpenAI request failed (${response.status}).`
-        );
-    }
+  const answer = data.choices?.[0]?.message?.content?.trim();
 
-    const answer = data.choices?.[0]?.message?.content?.trim();
+  if (!answer) throw new Error("OpenAI returned an empty response.");
 
-    if (!answer) {
-        throw new Error("OpenAI did not return a text answer.");
-    }
-
-    return answer;
+  return answer;
 }
 
-// --------------------------------------------------
-// CHAT ENDPOINT
-// Supports JSON and multipart image uploads.
-// --------------------------------------------------
+/* ---------------- HEALTH CHECK ---------------- */
 
-app.post("/api/chat", (req, res, next) => {
-    const contentType = req.headers["content-type"] || "";
-
-    if (contentType.includes("multipart/form-data")) {
-        upload.single("image")(req, res, error => {
-            if (error) {
-                return res.status(400).json({
-                    success: false,
-                    error: error.message
-                });
-            }
-
-            next();
-        });
-    } else {
-        next();
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    app: "TETRON 4 U",
+    providers: {
+      gemini: Boolean(GEMINI_KEY),
+      openai: Boolean(OPENAI_KEY)
     }
-}, async (req, res) => {
+  });
+});
+
+/* ---------------- AVAILABLE MODELS ---------------- */
+
+app.get("/api/models", async (req, res) => {
+  const provider = (req.query.provider || "auto").toLowerCase();
+
+  const result = {};
+
+  if (provider === "auto" || provider === "gemini") {
+    result.gemini = (await getGeminiModels()).map(model => model.id);
+  }
+
+  if (provider === "auto" || provider === "openai" || provider === "chatgpt") {
+    result.openai = (await getOpenAIModels()).map(model => model.id);
+  }
+
+  res.json({
+    success: true,
+    models: result
+  });
+});
+
+/* ---------------- CHAT API ---------------- */
+
+app.post("/api/chat", upload.single("image"), async (req, res) => {
+  try {
+    const message = String(req.body.message || "").trim();
+
+    const providerPreference = String(
+      req.body.provider || "auto"
+    ).toLowerCase();
+
+    let history = [];
+
     try {
-        const body = req.body || {};
+      const parsed = typeof req.body.history === "string"
+        ? JSON.parse(req.body.history)
+        : req.body.history;
 
-        const message = typeof body.message === "string"
-            ? body.message.trim()
-            : "";
+      if (Array.isArray(parsed)) {
+        history = parsed.slice(-6).map(item => ({
+          role: item.role,
+          content: String(item.content ?? item.text ?? "").slice(0, 4000)
+        }));
+      }
+    } catch {
+      history = [];
+    }
 
-        const provider = String(body.provider || "").toLowerCase();
-        const model = String(body.model || "").trim();
-        const image = req.file || null;
-
-        if (!message && !image) {
-            return res.status(400).json({
-                success: false,
-                error: "Enter a message or upload an image."
-            });
+    const image = req.file
+      ? {
+          buffer: req.file.buffer,
+          mimetype: req.file.mimetype
         }
+      : null;
 
-        if (message.length > 10000) {
-            return res.status(400).json({
-                success: false,
-                error: "Message is too long."
-            });
+    if (!message && !image) {
+      return res.status(400).json({
+        success: false,
+        error: "Please enter a message or upload an image."
+      });
+    }
+
+    let providerOrder;
+
+    if (["openai", "chatgpt"].includes(providerPreference)) {
+      providerOrder = ["openai", "gemini"];
+    } else {
+      providerOrder = ["gemini", "openai"];
+    }
+
+    const candidateLists = {};
+
+    for (const provider of providerOrder) {
+      candidateLists[provider] = await getCandidates(provider, Boolean(image));
+    }
+
+    // Try each provider first, then one alternate model if needed.
+    const candidates = [];
+
+    for (let index = 0; index < 3; index++) {
+      for (const provider of providerOrder) {
+        const model = candidateLists[provider]?.[index];
+
+        if (model && candidates.length < MAX_ATTEMPTS) {
+          candidates.push(model);
         }
+      }
 
-        if (!model || model.length > 200) {
-            return res.status(400).json({
-                success: false,
-                error: "Please select a model."
-            });
-        }
+      if (candidates.length >= MAX_ATTEMPTS) break;
+    }
 
-        // Accept a limited amount of text history.
-        let history = [];
+    if (!candidates.length) {
+      return res.status(503).json({
+        success: false,
+        error: "No compatible model is available. Check your API keys and model access."
+      });
+    }
 
-        if (typeof body.history === "string") {
-            try {
-                history = JSON.parse(body.history);
-            } catch {
-                history = [];
-            }
-        } else if (Array.isArray(body.history)) {
-            history = body.history;
-        }
+    let lastError;
 
-        history = history
-            .filter(item =>
-                item &&
-                ["user", "assistant"].includes(item.role) &&
-                typeof item.text === "string"
-            )
-            .slice(-12);
+    for (const candidate of candidates) {
+      try {
+        console.log(`Trying ${candidate.provider}: ${candidate.id}`);
 
-        let answer;
+        const answer = candidate.provider === "gemini"
+          ? await askGemini(candidate.id, message, history, image)
+          : await askOpenAI(candidate.id, message, history, image);
 
-        if (provider === "gemini") {
-            if (!GEMINI_KEY) {
-                throw new Error("Gemini API key is not configured.");
-            }
-
-            const models = await getGeminiModels();
-
-            if (!models.some(item => item.id === model)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Gemini model is unavailable for this API key. Refresh the model list."
-                });
-            }
-
-            answer = await askGemini(
-                model,
-                message || "Please analyze the uploaded image.",
-                history,
-                image
-            );
-
-        } else if (
-            provider === "openai" ||
-            provider === "chatgpt"
-        ) {
-            if (!OPENAI_KEY) {
-                throw new Error("OpenAI API key is not configured.");
-            }
-
-            const models = await getOpenAIModels();
-
-            if (!models.some(item => item.id === model)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "OpenAI model is unavailable for this API key. Refresh the model list."
-                });
-            }
-
-            answer = await askOpenAI(
-                model,
-                message || "Please analyze the uploaded image.",
-                history,
-                image
-            );
-
-        } else {
-            return res.status(400).json({
-                success: false,
-                error: "Choose Gemini or OpenAI."
-            });
-        }
+        console.log(`Success: ${candidate.provider} / ${candidate.id}`);
 
         return res.json({
-            success: true,
-            provider,
-            model,
-            answer
+          success: true,
+          provider: candidate.provider,
+          model: candidate.id,
+          answer
         });
+      } catch (error) {
+        lastError = error;
 
-    } catch (error) {
-        console.error("Chat error:", error.message);
-
-        return res.status(500).json({
-            success: false,
-            error: error.message || "Something went wrong."
-        });
+        console.error(
+          `Model failed (${candidate.provider}/${candidate.id}):`,
+          error.message
+        );
+      }
     }
-});
 
-// --------------------------------------------------
-// API 404
-// --------------------------------------------------
-
-app.use("/api", (req, res) => {
-    res.status(404).json({
-        success: false,
-        error: "API endpoint not found."
+    return res.status(502).json({
+      success: false,
+      error: "All available models failed. Check API quota, key access, or try again."
     });
+  } catch (error) {
+    console.error("Chat error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      error: "Something went wrong. Please try again."
+    });
+  }
 });
 
-// --------------------------------------------------
-// GENERAL ERROR HANDLER
-// --------------------------------------------------
+/* ---------------- ERROR HANDLER ---------------- */
 
 app.use((error, req, res, next) => {
-    console.error("Server error:", error.message);
+  console.error("Request error:", error.message);
 
-    if (res.headersSent) {
-        return next(error);
-    }
-
-    res.status(500).json({
-        success: false,
-        error: "Internal server error."
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({
+      success: false,
+      error: "Image upload failed. Maximum image size is 5 MB."
     });
+  }
+
+  res.status(400).json({
+    success: false,
+    error: error.message || "Invalid request."
+  });
 });
 
-// --------------------------------------------------
-// START SERVER
-// --------------------------------------------------
+/* ---------------- START SERVER ---------------- */
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`TETRON 4 U running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`TETRON 4 U running on port ${PORT}`);
 });
