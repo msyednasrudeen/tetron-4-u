@@ -3,45 +3,365 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#050510">
-  <title>TETRON 4 U — AI Assistant</title>
+  <meta name="theme-color" content="#080b16">
+  <title>TETRON 4 U — AI Chat</title>
 
   <style>
-    :root {
-      --bg: #050510;
-      --panel: #101020;
-      --border: #292945;
-      --text: #f5f7ff;
-      --muted: #9a9ab8;
-      --cyan: #13d9ff;
-      --blue: #315cff;
-      --purple: #7946ff;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
       min-height: 100vh;
+      background: #080b16;
+      color: #f3f6ff;
       font-family: Arial, sans-serif;
-      background:
-        radial-gradient(ellipse at top, #111438, transparent 60%),
-        var(--bg);
-      color: var(--text);
       display: flex;
-      flex-direction: column;
+      justify-content: center;
     }
 
-    button, textarea, select {
-      font: inherit;
+    .app {
+      width: 100%;
+      max-width: 850px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
     }
 
     header {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 13px 16px;
-      background: #0c0c1bea;
-      border-bottom
+      padding: 10px 0 18px;
+      border-bottom: 1px solid #252b43;
+    }
+
+    .logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 15px;
+      object-fit: contain;
+      background: #12182b;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 1px;
+    }
+
+    .tagline {
+      margin-top: 5px;
+      color: #9ca8c9;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      padding: 15px 0;
+    }
+
+    select, button, textarea {
+      font: inherit;
+    }
+
+    select, .refresh {
+      min-width: 0;
+      padding: 12px;
+      color: #f3f6ff;
+      background: #141a2d;
+      border: 1px solid #343d5d;
+      border-radius: 10px;
+    }
+
+    .refresh {
+      cursor: pointer;
+    }
+
+    .status {
+      min-height: 18px;
+      color: #aab7d9;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .chat {
+      flex: 1;
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 8px 0 20px;
+    }
+
+    .bubble {
+      max-width: 92%;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      padding: 13px 15px;
+      line-height: 1.55;
+      border-radius: 15px;
+    }
+
+    .user {
+      align-self: flex-end;
+      background: #263e83;
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: #151b2e;
+      border: 1px solid #28314b;
+    }
+
+    .composer {
+      display: flex;
+      gap: 9px;
+      padding-top: 12px;
+      border-top: 1px solid #252b43;
+      position: sticky;
+      bottom: 0;
+      background: #080b16;
+    }
+
+    textarea {
+      flex: 1;
+      resize: vertical;
+      min-height: 48px;
+      max-height: 160px;
+      padding: 13px;
+      border-radius: 12px;
+      border: 1px solid #343d5d;
+      background: #12182b;
+      color: white;
+      outline: none;
+    }
+
+    .send {
+      padding: 0 18px;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      background: #5865e8;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .send:disabled {
+      opacity: 0.5;
+      cursor: wait;
+    }
+
+    .hint {
+      color: #7e8aaa;
+      font-size: 11px;
+      text-align: center;
+      padding: 10px 0 0;
+    }
+
+    @media (max-width: 540px) {
+      .app { padding: 12px; }
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+      .refresh {
+        grid-column: 1 / -1;
+      }
+      h1 { font-size: 19px; }
+      .bubble { max-width: 96%; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <header>
+      <img
+        class="logo"
+        src="/tetron-logo.png"
+        alt="TETRON 4 U logo"
+        onerror="this.style.display='none'"
+      >
+      <div>
+        <h1>TETRON 4 U</h1>
+        <div class="tagline">THINK. ASK. CREATE.</div>
+      </div>
+    </header>
+
+    <section class="controls">
+      <select id="provider" aria-label="AI provider">
+        <option value="gemini">Google Gemini</option>
+        <option value="openai">OpenAI / ChatGPT</option>
+      </select>
+
+      <select id="model" aria-label="AI model">
+        <option value="">Loading models...</option>
+      </select>
+
+      <button class="refresh" id="refresh" type="button">
+        Refresh Models
+      </button>
+    </section>
+
+    <div class="status" id="status" role="status">
+      Loading available models...
+    </div>
+
+    <section class="chat" id="chat" aria-live="polite">
+      <div class="bubble bot">
+        Welcome to TETRON 4 U! Select an AI provider and model, then ask me anything.
+      </div>
+    </section>
+
+    <form class="composer" id="form">
+      <textarea
+        id="message"
+        placeholder="Ask anything..."
+        aria-label="Your message"
+        required
+      ></textarea>
+      <button class="send" id="send" type="submit">Send</button>
+    </form>
+
+    <div class="hint">
+      Models shown depend on your API account and provider availability.
+    </div>
+  </main>
+
+  <script>
+    const providerSelect = document.getElementById("provider");
+    const modelSelect = document.getElementById("model");
+    const refreshButton = document.getElementById("refresh");
+    const statusBox = document.getElementById("status");
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("form");
+    const messageInput = document.getElementById("message");
+    const sendButton = document.getElementById("send");
+
+    let modelList = [];
+
+    function addBubble(text, type) {
+      const bubble = document.createElement("div");
+      bubble.className = "bubble " + type;
+      bubble.textContent = text;
+      chat.appendChild(bubble);
+      bubble.scrollIntoView({ behavior: "smooth", block: "end" });
+      return bubble;
+    }
+
+    async function loadModels() {
+      const provider = providerSelect.value;
+
+      modelSelect.innerHTML = "";
+      modelSelect.disabled = true;
+      refreshButton.disabled = true;
+      statusBox.textContent = "Fetching available models...";
+
+      try {
+        const response = await fetch(
+          "/api/models?provider=" + encodeURIComponent(provider)
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Could not load models.");
+        }
+
+        modelList = data.models || [];
+
+        if (modelList.length === 0) {
+          throw new Error("No compatible models were found for this provider.");
+        }
+
+        for (const item of modelList) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.name + " (" + item.id + ")";
+          modelSelect.appendChild(option);
+        }
+
+        statusBox.textContent =
+          modelList.length + " models found. Choose one and start chatting.";
+      } catch (error) {
+        modelSelect.innerHTML = "";
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Models unavailable";
+        modelSelect.appendChild(option);
+        statusBox.textContent = error.message;
+      } finally {
+        modelSelect.disabled = false;
+        refreshButton.disabled = false;
+      }
+    }
+
+    providerSelect.addEventListener("change", loadModels);
+    refreshButton.addEventListener("click", loadModels);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const message = messageInput.value.trim();
+      const provider = providerSelect.value;
+      const model = modelSelect.value;
+
+      if (!message) return;
+
+      if (!model) {
+        statusBox.textContent = "Select an available model first.";
+        return;
+      }
+
+      addBubble(message, "user");
+      messageInput.value = "";
+      sendButton.disabled = true;
+      statusBox.textContent = "TETRON 4 U is thinking...";
+
+      const waitingBubble = addBubble("Thinking...", "bot");
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            message,
+            provider,
+            model
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "The AI request failed.");
+        }
+
+        waitingBubble.textContent = data.answer;
+        statusBox.textContent =
+          "Answered by " + data.provider + " · " + data.model;
+      } catch (error) {
+        waitingBubble.textContent = "Error: " + error.message;
+        statusBox.textContent = "Request failed. Check your API setup.";
+      } finally {
+        sendButton.disabled = false;
+        messageInput.focus();
+      }
+    });
+
+    messageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    loadModels();
+  </script>
+</body>
+</html>
