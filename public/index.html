@@ -3,313 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#101020">
+  <meta name="theme-color" content="#050510">
   <title>TETRON 4 U — AI Assistant</title>
 
   <style>
+    :root {
+      --bg: #050510;
+      --panel: #101020;
+      --border: #292945;
+      --text: #f5f7ff;
+      --muted: #9a9ab8;
+      --cyan: #13d9ff;
+      --blue: #315cff;
+      --purple: #7946ff;
+    }
+
     * {
       box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0c0c18;
-      color: #fff;
       min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(ellipse at top, #111438, transparent 60%),
+        var(--bg);
+      color: var(--text);
       display: flex;
       flex-direction: column;
     }
 
-    header {
-      padding: 18px;
-      background: #151529;
-      border-bottom: 1px solid #292943;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .logo {
-      width: 45px;
-      height: 45px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #7c4dff, #00c6ff);
-      display: grid;
-      place-items: center;
-      font-size: 22px;
-      font-weight: bold;
-    }
-
-    h1 {
-      font-size: 19px;
-      margin: 0 0 5px;
-    }
-
-    .status {
-      font-size: 12px;
-      color: #64e8ae;
-    }
-
-    main {
-      width: 100%;
-      max-width: 760px;
-      margin: auto;
-      padding: 22px 15px;
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-    }
-
-    .welcome {
-      text-align: center;
-      margin: 35px 0 25px;
-    }
-
-    .welcome h2 {
-      font-size: 28px;
-      margin-bottom: 10px;
-    }
-
-    .gradient {
-      background: linear-gradient(90deg, #a98bff, #49d9ff);
-      color: transparent;
-      background-clip: text;
-    }
-
-    .welcome p {
-      color: #aaaac2;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-
-    #chat {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      padding-bottom: 20px;
-    }
-
-    .message {
-      padding: 14px;
-      border-radius: 15px;
-      max-width: 90%;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      line-height: 1.6;
-      font-size: 14px;
-    }
-
-    .user {
-      align-self: flex-end;
-      background: #5140a5;
-    }
-
-    .bot {
-      align-self: flex-start;
-      background: #1b1b30;
-      border: 1px solid #30304a;
-    }
-
-    .controls {
-      background: #151529;
-      border: 1px solid #30304a;
-      border-radius: 18px;
-      padding: 12px;
-      margin-top: auto;
-    }
-
-    select, textarea, button {
+    button, textarea, select {
       font: inherit;
     }
 
-    select {
-      width: 100%;
-      background: #22223b;
-      color: white;
-      border: 1px solid #3a3a57;
-      border-radius: 10px;
-      padding: 11px;
-      margin-bottom: 10px;
-    }
-
-    .input-row {
+    header {
       display: flex;
-      gap: 8px;
-      align-items: flex-end;
-    }
-
-    textarea {
-      flex: 1;
-      min-width: 0;
-      resize: vertical;
-      min-height: 46px;
-      max-height: 130px;
-      background: #22223b;
-      border: 1px solid #3a3a57;
-      border-radius: 12px;
-      padding: 13px;
-      color: white;
-      outline: none;
-    }
-
-    button {
-      border: none;
-      border-radius: 12px;
-      padding: 14px;
-      background: linear-gradient(135deg, #7957ff, #398cff);
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-    }
-
-    .hint {
-      text-align: center;
-      font-size: 11px;
-      color: #8989a5;
-      margin: 12px 0 0;
-    }
-
-    footer {
-      text-align: center;
-      padding: 14px;
-      color: #8888a4;
-      font-size: 11px;
-    }
-
-    @media (max-width: 420px) {
-      .welcome h2 {
-        font-size: 24px;
-      }
-
-      main {
-        padding: 15px 10px;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <header>
-    <div class="logo">T</div>
-    <div>
-      <h1>TETRON <span class="gradient">4 U</span></h1>
-      <div class="status">● Your AI assistant</div>
-    </div>
-  </header>
-
-  <main>
-    <section class="welcome" id="welcome">
-      <h2>Welcome to <span class="gradient">TETRON 4 U</span></h2>
-      <p>
-        Two AI Minds. One Powerful Assistant.<br>
-        Ask questions, explore ideas and learn something new.
-      </p>
-    </section>
-
-    <section id="chat" aria-live="polite"></section>
-
-    <section class="controls">
-      <label for="provider">Choose your AI</label>
-
-      <select id="provider">
-        <option value="gemini">Gemini AI</option>
-        <option value="chatgpt">ChatGPT</option>
-      </select>
-
-      <form id="form" class="input-row">
-        <textarea
-          id="message"
-          placeholder="Ask anything..."
-          aria-label="Your message"
-          required
-          maxlength="10000"
-        ></textarea>
-
-        <button id="send" type="submit">Send</button>
-      </form>
-
-      <p class="hint">
-        AI can make mistakes. Verify important information.
-      </p>
-    </section>
-  </main>
-
-  <footer>Powered by Gemini AI & OpenAI</footer>
-
-  <script>
-    const form = document.getElementById("form");
-    const input = document.getElementById("message");
-    const chat = document.getElementById("chat");
-    const send = document.getElementById("send");
-    const provider = document.getElementById("provider");
-    const welcome = document.getElementById("welcome");
-
-    function addMessage(text, type) {
-      const div = document.createElement("div");
-      div.className = "message " + type;
-      div.textContent = text;
-      chat.appendChild(div);
-      div.scrollIntoView({ behavior: "smooth", block: "end" });
-      return div;
-    }
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-
-      const message = input.value.trim();
-
-      if (!message || send.disabled) return;
-
-      welcome.style.display = "none";
-
-      addMessage(message, "user");
-      input.value = "";
-      send.disabled = true;
-      send.textContent = "...";
-
-      const loading = addMessage("Thinking...", "bot");
-
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: message,
-            provider: provider.value
-          })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Request failed");
-        }
-
-        loading.textContent = data.reply;
-
-        if (data.fallback) {
-          loading.textContent +=
-            "\n\n(Answered using " + data.provider + " as fallback.)";
-        }
-
-      } catch (error) {
-        loading.textContent =
-          "Sorry! " + error.message +
-          "\nPlease check your API setup and try again.";
-      } finally {
-        send.disabled = false;
-        send.textContent = "Send";
-        input.focus();
-      }
-    });
-  </script>
-</body>
-</html>
+      align-items: center;
+      gap: 12px;
+      padding: 13px 16px;
+      background: #0c0c1bea;
+      border-bottom
