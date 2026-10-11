@@ -309,21 +309,34 @@ button {
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 800;
-  background: #1b2440;
+  overflow: hidden;
+  background: linear-gradient(145deg, #242d49, #141a2c);
+  border: 1px solid #343d5b;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .user .avatar {
   order: 2;
-  background: #4d388e;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(145deg, #8b5cf6, #4931a0);
+  border: 1px solid #a78bfa;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .bubble {
@@ -830,7 +843,26 @@ function addMessage(role, text, options = {}) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = role === "user" ? "YOU" : "T4U";
+
+  if (role === "user") {
+    avatar.setAttribute("aria-label", "You");
+    avatar.title = "You";
+    avatar.innerHTML = `
+      <svg viewBox="0 0 24 24" width="22" height="22"
+           fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <circle cx="12" cy="8" r="4"></circle>
+        <path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path>
+      </svg>`;
+  } else {
+    avatar.setAttribute("aria-label", "TETRON 4 U AI");
+    avatar.title = "TETRON 4 U";
+    const logo = document.createElement("img");
+    logo.src = "/tetron-logo.png";
+    logo.alt = "TETRON 4 U";
+    avatar.appendChild(logo);
+  }
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
