@@ -212,6 +212,81 @@ button {
   color: #c4b5fd;
 }
 
+
+/* TETRON 4 U PREMIUM LOGO ANIMATION */
+
+@keyframes t4uLogoEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.45) rotate(-12deg);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.12) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes t4uLogoGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px #8b5cf655)
+            drop-shadow(0 0 20px #8b5cf622);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px #a78bfa)
+            drop-shadow(0 0 38px #8b5cf688);
+  }
+}
+
+@keyframes t4uRing {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes t4uTextReveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.welcome-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  margin-bottom: 22px;
+  animation:
+    t4uLogoEntrance 900ms cubic-bezier(.2,.8,.2,1) both,
+    t4uLogoGlow 2.4s ease-in-out 900ms infinite;
+}
+
+.welcome h1 {
+  animation: t4uTextReveal 700ms ease 250ms both;
+}
+
+.welcome p {
+  animation: t4uTextReveal 700ms ease 450ms both;
+}
+
+.welcome .suggestions {
+  animation: t4uTextReveal 700ms ease 650ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-logo,
+  .welcome h1,
+  .welcome p,
+  .welcome .suggestions {
+    animation: none !important;
+  }
+}
+
 /* CHAT */
 
 .chat-area {
