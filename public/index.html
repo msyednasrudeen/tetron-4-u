@@ -1342,6 +1342,116 @@ async function checkServer() {
 
 checkServer();
 </script>
+
+<style>
+/* TETRON PREMIUM UI V2 */
+
+:root {
+  --tetron-glow: rgba(139, 92, 246, 0.28);
+  --tetron-border: rgba(167, 139, 250, 0.22);
+}
+
+.topbar {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--tetron-border);
+}
+
+.top-badge {
+  border: 1px solid var(--tetron-border);
+  box-shadow: 0 0 18px var(--tetron-glow);
+  transition: box-shadow .25s ease, transform .25s ease;
+}
+
+.top-badge:hover {
+  box-shadow: 0 0 26px rgba(139, 92, 246, .42);
+  transform: translateY(-1px);
+}
+
+.message-row {
+  animation: tetronMessageIn .28s ease both;
+}
+
+.message-row.user,
+.message-row.assistant {
+  transition: transform .2s ease;
+}
+
+.composer {
+  border: 1px solid var(--tetron-border);
+  box-shadow: 0 0 22px rgba(139, 92, 246, .07);
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+
+.composer:focus-within {
+  border-color: rgba(167, 139, 250, .7);
+  box-shadow: 0 0 24px var(--tetron-glow);
+}
+
+.icon-btn,
+.new-chat,
+.sidebar-btn {
+  transition: transform .2s ease, box-shadow .2s ease,
+              border-color .2s ease;
+}
+
+.icon-btn:hover,
+.new-chat:hover,
+.sidebar-btn:hover {
+  box-shadow: 0 0 18px var(--tetron-glow);
+}
+
+.icon-btn:active,
+.new-chat:active,
+.sidebar-btn:active {
+  transform: scale(.96);
+}
+
+.sidebar {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.history {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(167, 139, 250, .45) transparent;
+}
+
+.suggestion {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#messageInput {
+  caret-color: #c4b5fd;
+}
+
+@keyframes tetronMessageIn {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-row {
+    animation: none !important;
+  }
+
+  .icon-btn,
+  .new-chat,
+  .sidebar-btn,
+  .top-badge,
+  .composer {
+    transition: none !important;
+  }
+}
+</style>
+
 </body>
 </html>
 
