@@ -287,6 +287,27 @@ button {
   }
 }
 
+
+/* TETRON CREATOR CREDIT */
+.creator-credit {
+    margin-top: 18px;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: #c4b5fd;
+    opacity: 0;
+    animation: creatorReveal 1.2s ease forwards;
+    animation-delay: 1.8s;
+    text-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+.creator-credit span {
+    color: #fff;
+    font-weight: 700;
+}
+@keyframes creatorReveal {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* CHAT */
 
 .chat-area {
@@ -727,6 +748,10 @@ button {
                alt="TETRON 4 U"
                onerror="this.style.display='none'">
 
+          <div class="creator-credit">
+  Created by <span>Syed Nasrudeen</span>
+</div>
+
           <h1>Welcome to <span class="gradient">TETRON 4 U</span></h1>
           <p>
             Your intelligent AI companion. Ask questions, explore ideas,
@@ -1041,6 +1066,9 @@ function showWelcome() {
     <div class="welcome" id="welcome">
       <img src="/tetron-logo.png" class="welcome-logo" alt="TETRON 4 U"
            onerror="this.style.display='none'">
+      <div class="creator-credit">
+  Created by <span>Syed Nasrudeen</span>
+</div>
       <h1>Welcome to <span class="gradient">TETRON 4 U</span></h1>
       <p>Your intelligent AI companion. Ask questions, explore ideas,
       write code, or upload an image to get started.</p>
