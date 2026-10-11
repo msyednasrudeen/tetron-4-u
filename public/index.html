@@ -1344,3 +1344,69 @@ checkServer();
 </script>
 </body>
 </html>
+
+<style>
+/* TETRON PREMIUM WELCOME UPGRADE */
+
+.welcome {
+  animation: premiumWelcomeIn 1s ease both;
+}
+
+.welcome-logo {
+  filter: drop-shadow(0 0 12px rgba(168,85,247,.55));
+  animation: premiumLogoFloat 3s ease-in-out infinite;
+  transition: filter .3s ease, transform .3s ease;
+}
+
+.welcome-logo:hover {
+  filter: drop-shadow(0 0 24px rgba(168,85,247,.9));
+  transform: scale(1.05);
+}
+
+.creator-credit {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(168,85,247,.5);
+}
+
+.welcome h1 {
+  animation: premiumTitleIn 1s ease .2s both;
+}
+
+.welcome p {
+  animation: premiumTitleIn 1s ease .4s both;
+}
+
+.welcome .suggestions .suggestion {
+  transition: transform .25s ease, box-shadow .25s ease,
+              border-color .25s ease;
+}
+
+.welcome .suggestions .suggestion:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(139,92,246,.18);
+  border-color: rgba(168,85,247,.65);
+}
+
+@keyframes premiumWelcomeIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes premiumLogoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes premiumTitleIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome, .welcome-logo, .welcome h1, .welcome p {
+    animation: none !important;
+  }
+}
+</style>
