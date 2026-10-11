@@ -717,6 +717,9 @@ button {
     <button class="new-chat" id="newChatBtn">＋ New Chat</button>
 
     <div class="section-label">Recent chats</div>
+    <input type="search" id="historySearch"
+           placeholder="Search conversations..."
+           aria-label="Search conversations">
     <div class="history" id="historyList"></div>
 
     <button class="sidebar-btn" id="clearHistoryBtn">🗑 Clear History</button>
@@ -999,20 +1002,82 @@ function addMessage(role, text, options = {}) {
 
 function renderHistory() {
   const list = $("historyList");
+  const search = $("historySearch");
+  const query = search ? search.value.trim().toLowerCase() : "";
+
   list.replaceChildren();
 
-  chats.forEach(chat => {
+  const filtered = chats.filter(chat =>
+    (chat.title || "New chat").toLowerCase().includes(query) ||
+    (chat.messages || []).some(msg =>
+      String(msg.content || "").toLowerCase().includes(query)
+    )
+  );
+
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = query ? "No matching conversations" : "No saved chats yet";
+    list.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(chat => {
     const item = document.createElement("div");
     item.className = "history-item";
-    item.innerHTML = "<span>◷</span>";
 
-    const title = document.createElement("span");
-    title.textContent = chat.title || "New chat";
-    item.appendChild(title);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "history-open";
+    open.textContent = chat.title || "New chat";
+    open.title = open.textContent;
+    open.addEventListener("click", () => openChat(chat.id));
 
-    item.addEventListener("click", () => openChat(chat.id));
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.textContent = "✎";
+    rename.title = "Rename conversation";
+    rename.setAttribute("aria-label", "Rename conversation");
+    rename.addEventListener("click", event => {
+      event.stopPropagation();
+      const title = prompt("Enter a new conversation name:", chat.title || "New chat");
+      if (title === null) return;
+      const cleaned = title.trim().slice(0, 60);
+      if (!cleaned) {
+        showToast("Chat name cannot be empty.");
+        return;
+      }
+      chat.title = cleaned;
+      saveChats();
+      showToast("Conversation renamed.");
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = "Delete conversation";
+    remove.setAttribute("aria-label", "Delete conversation");
+    remove.addEventListener("click", event => {
+      event.stopPropagation();
+      if (!confirm("Delete this conversation?")) return;
+      chats = chats.filter(entry => entry.id !== chat.id);
+      if (currentChatId === chat.id) newChat();
+      saveChats();
+      showToast("Conversation deleted.");
+    });
+
+    actions.append(rename, remove);
+    item.append(open, actions);
     list.appendChild(item);
   });
+}
+
+const historySearch = $("historySearch");
+if (historySearch) {
+  historySearch.addEventListener("input", renderHistory);
 }
 
 function storeCurrentChat() {
@@ -1452,9 +1517,64 @@ checkServer();
 }
 </style>
 
-</body>
-</html>
 
+<style>
+/* TETRON HISTORY V2 */
+#historySearch {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0;
+  padding: 11px 12px;
+  color: inherit;
+  background: rgba(139, 92, 246, .08);
+  border: 1px solid rgba(167, 139, 250, .25);
+  border-radius: 12px;
+  outline: none;
+}
+#historySearch:focus {
+  border-color: rgba(167, 139, 250, .8);
+  box-shadow: 0 0 16px rgba(139, 92, 246, .18);
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.history-open {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 10px 6px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.history-actions {
+  display: flex;
+  gap: 3px;
+}
+.history-actions button {
+  min-width: 32px;
+  min-height: 36px;
+  border: 1px solid rgba(167, 139, 250, .18);
+  border-radius: 9px;
+  color: inherit;
+  background: rgba(139, 92, 246, .08);
+  cursor: pointer;
+}
+.history-actions button:hover {
+  border-color: rgba(167, 139, 250, .7);
+}
+.history-empty {
+  padding: 12px 6px;
+  opacity: .65;
+  font-size: 13px;
+}
+</style>
 <style>
 /* TETRON PREMIUM WELCOME UPGRADE */
 
@@ -1520,3 +1640,5 @@ checkServer();
   }
 }
 </style>
+</body>
+</html>
